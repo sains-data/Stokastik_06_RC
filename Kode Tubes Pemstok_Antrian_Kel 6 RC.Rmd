@@ -1,0 +1,161 @@
+---
+title: "Tubes Pemstok (2)"
+author: "Marleta Cornelia Leander / 122450092"
+date: "2025-11-19"
+output: html_document
+---
+```{r}
+library(readxl)
+library(dplyr)
+library(lubridate)
+
+# 1) Import Dataset untuk Setiap Sheet
+dfA <- read_excel("C:/Users/Marleta/Downloads/Galeri Pemstok.xlsx", sheet="kasir A")
+dfB <- read_excel("C:/Users/Marleta/Downloads/Galeri Pemstok.xlsx", sheet="kasir B")
+
+dfA$Server <- "A"
+dfB$Server <- "B"
+
+df <- bind_rows(dfA, dfB)
+
+# Menyamakan format waktu
+df <- df %>%
+  mutate(
+    Waktu_Datang  = as.POSIXct(`Waktu Datang`,  origin="1899-12-30"),
+    Waktu_Mulai   = as.POSIXct(`Waktu Mulai Dilayani`, origin="1899-12-30"),
+    Waktu_Selesai = as.POSIXct(`Waktu Selesai`, origin="1899-12-30")
+  )
+
+```
+
+
+```{r}
+
+# Konversi menit ke detik
+
+df <- df %>%
+  mutate(
+    Tunggu_detik  = `Waktu Tunggu (menit)` * 60,
+    Layanan_detik = `Waktu Pelayanan (menit)` * 60,
+    Total_detik   = `Waktu Total (menit)` * 60
+  )
+
+# 2) Hitung setiap parameter M/M/2
+total_customer <- nrow(df)
+total_time <- 3 * 3600
+
+lambda <- total_customer / total_time
+mu <- 1 / mean(df$Layanan_detik, na.rm = TRUE)
+
+s <- 2
+rho <- lambda / (s * mu)
+
+# 3) Buat Fungsi M/M/2
+mm_s <- function(lambda, mu, s){
+  
+  rho <- lambda / (s * mu)
+  
+  sum_part <- sum(((lambda/mu)^(0:(s-1))) / factorial(0:(s-1)))
+  p0 <- 1 / (sum_part + ((lambda/mu)^s)/(factorial(s) * (1 - rho)))
+  
+  Lq <- (((lambda/mu)^s) * rho/(factorial(s)*(1-rho)^2)) * p0
+  Ls <- Lq + (lambda/mu)
+  Wq <- Lq / lambda
+  Ws <- Ls / lambda
+  
+  return(list(Lq=Lq, Ls=Ls, Wq=Wq, Ws=Ws, P0=p0, rho=rho))
+}
+
+# 4) HITUNG HASIL M/M/2
+hasil <- mm_s(lambda, mu, s)
+```
+
+```{r}
+# 5) Menampilkan Hasil
+
+cat("         HASIL ANTRIAN M/M/2         \n")
+cat("Jumlah data pelanggan :", total_customer, "\n")
+cat("Lambda (kedatangan)    :", lambda, "pelanggan/detik\n")
+cat("Mu (pelayanan)         :", mu, "pelanggan/detik/server\n")
+cat("Utilisasi ρ            :", hasil$rho, "\n\n")
+
+cat("Lq (rata2 antrian)     :", hasil$Lq, "pelanggan\n")
+cat("Ls (dlm sistem)        :", hasil$Ls, "pelanggan\n")
+cat("Wq (waktu tunggu)      :", hasil$Wq, "detik\n")
+cat("Ws (waktu total)       :", hasil$Ws, "detik\n")
+cat("P0 (prob. kosong)      :", hasil$P0, "\n")
+```
+
+```{r}
+# 6) Menampilkan Plot Histogram Waktu Tunggu 
+
+library(ggplot2)
+
+ggplot(df, aes(Tunggu_detik)) +
+  geom_histogram(
+    bins = 30,
+    fill="#F39C12",
+    color="black"
+  ) +
+  geom_vline(
+    aes(xintercept = mean(Tunggu_detik, na.rm = TRUE)),
+    color="red", linetype="dashed", size=1
+  ) +
+  xlim(0, max(df$Tunggu_detik, na.rm = TRUE) + 10) +
+  theme_minimal() +
+  labs(
+    title = "Histogram Waktu Tunggu",
+    x = "Waktu Tunggu (detik)",
+    y = "Frekuensi"
+  ) +
+  theme(text = element_text(size=12))
+
+```
+
+
+```{r}
+# Menampilkan Plot Histogram Waktu Pelayanan
+ggplot(df, aes(Layanan_detik)) +
+  geom_histogram(
+    bins = 25,
+    fill="#27AE60",
+    color="black"
+  ) +
+  geom_vline(
+    aes(xintercept = mean(Layanan_detik, na.rm = TRUE)),
+    color="red", linetype="dashed", size=1
+  ) +
+  xlim(0, max(df$Layanan_detik, na.rm = TRUE) + 10) +
+  theme_minimal() +
+  labs(
+    title = "Histogram Waktu Pelayanan",
+    x = "Waktu Pelayanan (detik)",
+    y = "Frekuensi"
+  ) +
+  theme(text = element_text(size=12))
+
+```
+
+```{r}
+# Menampilkan Plot Histogram Waktu Total dalam Sistem
+ggplot(df, aes(Total_detik)) +
+  geom_histogram(
+    bins = 25,
+    fill="#8E44AD",
+    color="black"
+  ) +
+  geom_vline(
+    aes(xintercept = mean(Total_detik, na.rm = TRUE)),
+    color="red", linetype="dashed", size=1
+  ) +
+  xlim(0, max(df$Total_detik, na.rm = TRUE) + 10) +
+  theme_minimal() +
+  labs(
+    title = "Histogram Waktu Total Dalam Sistem",
+    x = "Waktu Total (detik)",
+    y = "Frekuensi"
+  ) +
+  theme(text = element_text(size=12))
+
+```
+
